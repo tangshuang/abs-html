@@ -1,0 +1,19 @@
+{
+  "name": "abs-html",
+  "version": "1.0.0",
+  "description": "Abstract HTML",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tangshuang/abs-html.git"
+  },
+  "author": "tangshuang",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/tangshuang/abs-html/issues"
+  },
+  "homepage": "https://github.com/tangshuang/abs-html#readme"
+}

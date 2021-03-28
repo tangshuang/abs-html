@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>测试标题</title>
+  </head>
+  <body>
+    <div id="aaa">aaa</div>
+    <div id="bbb">bbb</div>
+    <div id="ccc">ccc</div>
+  </body>
+
+  <script>
+    const observer = new MutationObserver((mutationList => console.log(mutationList)))
+    observer.observe(document, { attributes: true, childList: true, subtree: true })
+
+    setTimeout(() => {
+      document.body.insertBefore(document.querySelector('#ccc'), document.querySelector('#aaa'))
+    }, 1000)
+  </script>
+</html>
