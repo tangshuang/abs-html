@@ -1,6 +1,6 @@
 {
   "name": "abs-html",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "description": "Abstract HTML",
   "main": "index.js",
   "scripts": {
