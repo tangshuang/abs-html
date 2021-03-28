@@ -175,7 +175,7 @@ function parseHTMLToHyperJSON(html, options = {}) {
     nodes.forEach((node) => {
     const [tag, attrs, ...children] = node
     const strs = children.filter(item => typeof item === 'string' && item.trim())
-      if (!strs.length) {
+      if (children.length > 1 && !strs.length) {
         const contents = children.filter(item => typeof item !== 'string')
         node.length = 2
         node.push(...contents)
