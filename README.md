@@ -110,11 +110,11 @@ const hyperJSON = parseHTMLToHyperJSON(`
             ],
             [
                 "div",
-                null
+                null,
+                ""
             ],
             [
-                "my-app",
-                null
+                "my-app"
             ]
         ]
     ]
