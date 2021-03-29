@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+
+<div>xx</div>
+
+<script src="../index.js"></script>
+<script>
+  let prev = null
+  setInterval(() => {
+    const html = document.documentElement.outerHTML
+    const next = parseHTMLToHyperJSON(html)
+    if (prev) {
+      const mutations = diffHyperJSON(prev, next)
+      if (mutations.length) {
+        console.log(mutations)
+      }
+    }
+    prev = next
+  }, 100)
+</script>

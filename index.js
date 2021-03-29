@@ -150,6 +150,7 @@ function parseHTMLToHyperJSON(html, options = {}) {
       const parent = nest.length ? nest[nest.length - 1] : nest
       parent.push(node)
       nest.push(node)
+      node[1] = node[1] || null // 强制props
       inTagBegin = null
       inTag = node
     }
