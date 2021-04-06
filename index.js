@@ -410,8 +410,10 @@ function diffHyperJSON(hyperjson1, hyperjson2) {
           before = makePath(nextItem, memoItems)
 
           // 交换位置
-          ;[memoItems[index], memoItems[nextIndex]] = [memoItems[nextIndex], memoItems[index]]
-          ;[memoIdentifiers[index], memoIdentifiers[nextIndex]] = [memoIdentifiers[nextIndex], memoIdentifiers[index]]
+          const start = Math.min(index, nextIndex)
+          const end = Math.max(index, nextIndex)
+          memoItems.splice(start, end - start, memoItems.slice(start + 1, end).concat(nextItem))
+          memoIdentifiers.splice(start, end - start, memoIdentifiers.slice(start + 1, end).concat(nextId))
         }
         // 这种情况不可能存在，存在了就是有问题
         else {
