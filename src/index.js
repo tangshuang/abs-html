@@ -5,7 +5,7 @@
  * @param {boolean} options.loose 是否宽松，开启后，将保留标签换行（和原始html换行一致）
  * @returns hyperJSON
  */
-function parseHTMLToHyperJSON(html, options = {}) {
+export function parseHTMLToHyperJSON(html, options = {}) {
   const nest = []
 
   const len = html.length
@@ -187,7 +187,7 @@ function parseHTMLToHyperJSON(html, options = {}) {
   return nest[0]
 }
 
-function rebuildHyperJSONToHTML(hyperjson) {
+export function rebuildHyperJSONToHTML(hyperjson) {
   const [name, attrs, ...children] = hyperjson
 
   let html = ''
@@ -249,7 +249,7 @@ function rebuildHyperJSONToHTML(hyperjson) {
   return html
 }
 
-function diffHyperJSON(hyperjson1, hyperjson2) {
+export function diffHyperJSON(hyperjson1, hyperjson2) {
   const getIdentifiers = (items) => {
     const ids = items.map((item) => {
       if (typeof item === 'string') {
@@ -410,10 +410,8 @@ function diffHyperJSON(hyperjson1, hyperjson2) {
           before = makePath(nextItem, memoItems)
 
           // 交换位置
-          const start = Math.min(index, nextIndex)
-          const end = Math.max(index, nextIndex)
-          memoItems.splice(start, end - start, memoItems.slice(start + 1, end).concat(nextItem))
-          memoIdentifiers.splice(start, end - start, memoIdentifiers.slice(start + 1, end).concat(nextId))
+          ;[memoItems[index], memoItems[nextIndex]] = [memoItems[nextIndex], memoItems[index]]
+          ;[memoIdentifiers[index], memoIdentifiers[nextIndex]] = [memoIdentifiers[nextIndex], memoIdentifiers[index]]
         }
         // 这种情况不可能存在，存在了就是有问题
         else {
@@ -487,7 +485,7 @@ function diffHyperJSON(hyperjson1, hyperjson2) {
   return mutations
 }
 
-function patchHyperJSON(hyperjson, mutations) {
+export function patchHyperJSON(hyperjson, mutations) {
   const deepClone = (obj) => {
     const copy = Array.isArray(obj) ? [] : {}
     for (let key in obj) {
@@ -581,13 +579,4 @@ function patchHyperJSON(hyperjson, mutations) {
     }
   })
   return json
-}
-
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = {
-    parseHTMLToHyperJSON,
-    rebuildHyperJSONToHTML,
-    diffHyperJSON,
-    patchHyperJSON,
-  }
 }
