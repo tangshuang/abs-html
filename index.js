@@ -333,6 +333,7 @@ function diffHyperJSON(hyperjson1, hyperjson2) {
     const inserted = []
     const moved = []
 
+    // 找出被移除的节点
     for (let i = 0; i < items1.length; i ++) {
       const id1 = identifiers1[i]
 
@@ -348,22 +349,24 @@ function diffHyperJSON(hyperjson1, hyperjson2) {
       }
     }
 
+    // 找出被添加的节点
     for (let i = 0, len = items2.length - 1; i < len; i ++) {
       const id2 = identifiers2[i]
 
       const index = memoIdentifiers.indexOf(id2)
       if (index < 0) {
         let sibling = null
+        // 从下一个节点开始找起
         for (let curr = i + 1, len = identifiers2.length; curr < len; curr ++) {
-          const id2 = identifiers2[curr]
-          const index = memoIdentifiers.indexOf(id2)
-          if (index > -1) {
-            sibling = index
+          const cid2 = identifiers2[curr]
+          const sibc = memoIdentifiers.indexOf(cid2)
+          if (sibc > -1) {
+            sibling = sibc
             break
           }
         }
 
-        const before = sibling === null ? null : makePath(memoItems[sibling], memoItems)
+        const before = sibling === null ? null : makePath(memoItems[sibling], memoItems) // null表示插入到最后一个元素
         const item = items2[i]
         const node = {
           before,
@@ -371,35 +374,50 @@ function diffHyperJSON(hyperjson1, hyperjson2) {
         }
 
         inserted.push(node)
-        memoItems.splice(sibling ? sibling : 0, 0, item)
-        memoIdentifiers.splice(sibling ? sibling : 0, 0, id2)
-      }
-    }
-
-    for (let i = items2.length - 1; i > -1; i --) {
-      const id2 = identifiers2[i]
-
-      const index = memoIdentifiers.indexOf(id2)
-      if (index > -1 && index !== i) {
-        const item = memoItems[index]
-        const node = makePath(item, memoItems)
-        memoItems.splice(index, 1)
-        memoIdentifiers.splice(index, 1)
-
-        const next = i + 1
-        let before = null
-        if (next >= items2.length) {
+        if (sibling === null) {
           memoItems.push(item)
           memoIdentifiers.push(id2)
         }
         else {
-          const nextId = identifiers2[next]
-          const nextIndex = memoIdentifiers.indexOf(nextId)
+          memoItems.splice(sibling, 0, item)
+          memoIdentifiers.splice(sibling, 0, id2)
+        }
+      }
+    }
+
+    // 找出被移动的节点
+    // 此时，identifiers2和memoIdentifiers内容相同，只是顺序不同，需要调整位置
+    for (let i = items2.length - 1; i > -1; i --) {
+      const id2 = identifiers2[i]
+      const index = memoIdentifiers.indexOf(id2)
+      if (index > -1 && index !== i) {
+        const item = memoItems[index]
+        const node = makePath(item, memoItems)
+
+        const next = i + 1
+        const nextId = identifiers2[next]
+        const nextIndex = memoIdentifiers.indexOf(nextId)
+
+        let before = null
+        if (next >= items2.length) {
+          memoItems.splice(index, 1)
+          memoIdentifiers.splice(index, 1)
+          memoItems.push(item)
+          memoIdentifiers.push(id2)
+        }
+        else if (nextIndex > -1) {
           const nextItem = memoItems[nextIndex]
           before = makePath(nextItem, memoItems)
 
-          memoItems.splice(i, 0, item)
-          memoIdentifiers.splice(i, 0, id2)
+          // 交换位置
+          ;[memoItems[index], memoItems[nextIndex]] = [memoItems[nextIndex], memoItems[index]]
+          ;[memoIdentifiers[index], memoIdentifiers[nextIndex]] = [memoIdentifiers[nextIndex], memoIdentifiers[index]]
+        }
+        // 这种情况不可能存在，存在了就是有问题
+        else {
+          memoItems.splice(index, 1)
+          memoIdentifiers.splice(index, 1)
+          continue
         }
 
         moved.push({
