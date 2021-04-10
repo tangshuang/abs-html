@@ -1,3 +1,20 @@
+const SELF_CLOSE_TAGS = [
+  'area',
+  'base',
+  'br',
+  'col',
+  'embed',
+  'hr',
+  'img',
+  'input',
+  'link',
+  'meta',
+  'param',
+  'source',
+  'track',
+  'wbr',
+]
+
 /**
  * 将html字符串解析为hyperJSON
  * @param {string} html
@@ -18,6 +35,7 @@ export function parseHTMLToHyperJSON(html, options = {}) {
   for (let i = 0; i < len; i ++) {
     let char = html[i]
     const next = html[i + 1]
+    // 关闭标签
     if (inTag && char === '<' && next === '/') {
       while (char !== '>') {
         i ++
@@ -35,7 +53,8 @@ export function parseHTMLToHyperJSON(html, options = {}) {
       nest.pop()
       inTag = nest[nest.length - 1]
     }
-    else if (!inTagBegin && char === '<') {
+    // 开始一个标签
+    else if (!inTagBegin && char === '<' && html[i + 1] !== ' ') {
       if (html[i + 1] === '-' && html[i + 2] === '-') {
         const comment = ['#comment', null]
         let content = ''
@@ -76,15 +95,30 @@ export function parseHTMLToHyperJSON(html, options = {}) {
 
       i --
     }
+    // 属性
     else if (inTagBegin && char === ' ') {
       let attr = ''
 
       i ++
       char = html[i]
 
-      while (char !== '=' && char !== ' ' && char !== '>') {
+      let quota = ''
+
+      while (char !== '=' && char !== '>') {
         if (char === '/' && html[i + 1] === '>') {
           break
+        }
+        if (char === ' ' && !quota) {
+          break
+        }
+
+        if ((char === '"' || char === "'") && html[i - 1] !== '\\') {
+          if (char === quota) {
+            quota = ''
+          }
+          else {
+            quota = char
+          }
         }
 
         attr += char
@@ -145,6 +179,7 @@ export function parseHTMLToHyperJSON(html, options = {}) {
 
       i --
     }
+    // 开始标签结束
     else if (inTagBegin && char === '>') {
       const node = inTagBegin
       const parent = nest.length ? nest[nest.length - 1] : nest
@@ -153,6 +188,11 @@ export function parseHTMLToHyperJSON(html, options = {}) {
       node[1] = node[1] || null // 强制props
       inTagBegin = null
       inTag = node
+
+      if (SELF_CLOSE_TAGS.indexOf(node[0]) > -1) {
+        nest.pop()
+        inTag = nest[nest.length - 1]
+      }
     }
     else if (inTag) {
       const node = inTag
@@ -231,7 +271,7 @@ export function rebuildHyperJSONToHTML(hyperjson) {
     return str
   }
 
-  if (name.indexOf('!') === 0) {
+  if (name.indexOf('!') === 0 || name.indexOf('?')) {
     html += `<${name}${buildAttrs(attrs)}>${buildChildren(children)}`
   }
   else if (name.indexOf('#') === 0) {
@@ -277,6 +317,10 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
   }
 
   const makePath = (item, items) => {
+    // if (typeof item !== 'string' && !Array.isArray(item)) {
+    //   throw new Error(`makePath第一个参数必须是字符串或数组，结果接收到 ${JSON.stringify(item)},${JSON.stringify(items)}`)
+    // }
+
     let nth = 1
 
     for (let i = 0, len = items.length; i < len; i ++) {
@@ -301,7 +345,7 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
   }
 
   const createXPath = (deepth, path) => {
-    return deepth.concat(path).join('/')
+    return deepth.concat(path || []).join('/')
   }
 
   const diffAttrs = (attrs1, attrs2, deepth) => {
@@ -314,8 +358,8 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
           type: 'attribute',
           target: createXPath(deepth),
           name: key,
-          next: key in attrs2 ? attrs2[key] : null,
-          prev: key in attrs1 ? attrs1[key] : null,
+          next: key in attrs2 ? attrs2[key] : void 0,
+          prev: key in attrs1 ? attrs1[key] : void 0,
         })
       }
     })
@@ -409,9 +453,8 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
           const nextItem = memoItems[nextIndex]
           before = makePath(nextItem, memoItems)
 
-          // 交换位置
-          ;[memoItems[index], memoItems[nextIndex]] = [memoItems[nextIndex], memoItems[index]]
-          ;[memoIdentifiers[index], memoIdentifiers[nextIndex]] = [memoIdentifiers[nextIndex], memoIdentifiers[index]]
+          memoItems.splice(index, 1)
+          memoItems.splice(nextIndex - (nextIndex > index ? 1 : 0), 0, item)
         }
         // 这种情况不可能存在，存在了就是有问题
         else {
@@ -552,7 +595,12 @@ export function patchHyperJSON(hyperjson, mutations) {
     else if (type === 'attribute') {
       const { name, next } = mutation
       const attrs = node[1] || {}
-      attrs[name] = next
+      if (typeof next === 'undefined') {
+        delete attrs[name]
+      }
+      else {
+        attrs[name] = next
+      }
       node[1] = attrs
     }
     else if (type === 'children') {
