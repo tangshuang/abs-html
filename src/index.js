@@ -316,7 +316,7 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
     return res
   }
 
-  const makePath = (item, items) => {
+  const makePath = (item, index, items) => {
     // if (typeof item !== 'string' && !Array.isArray(item)) {
     //   throw new Error(`makePath第一个参数必须是字符串或数组，结果接收到 ${JSON.stringify(item)},${JSON.stringify(items)}`)
     // }
@@ -324,7 +324,7 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
     let nth = 1
 
     for (let i = 0, len = items.length; i < len; i ++) {
-      if (items[i] === item) {
+      if (i >= index && items[i] === item) {
         break
       }
       if (typeof item === 'string') {
@@ -346,21 +346,6 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
 
   const createXPath = (deepth, path) => {
     return deepth.concat(path || []).join('/')
-  }
-
-  // 根据item在items中的位置，找到item应该移动到items0中的哪个位置
-  const findIndexMoveTo = (item, items, items0) => {
-    let index = -1
-    for (let i = 0, len = items.length; i < len; i ++) {
-      const next = items[i]
-      if (items0.includes(next)) {
-        index ++
-        if (item === next) {
-          return index
-        }
-      }
-    }
-    return index
   }
 
   const diffAttrs = (attrs1, attrs2, deepth) => {
@@ -395,24 +380,23 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
     const moved = []
 
     // 找出被移除的节点
-    for (let i = 0; i < items1.length; i ++) {
+    for (let i = items1.length - 1; i > -1; i --) {
       const id1 = identifiers1[i]
 
       const index = identifiers2.indexOf(id1)
       if (index < 0) {
         removed.push({
-          node: makePath(items1[i], items1),
+          node: makePath(items1[i], i, items1),
         })
 
-        const index = memoIdentifiers.indexOf(id1)
-        memoItems.splice(index, 1)
-        memoIdentifiers.splice(index, 1)
+        memoItems.splice(i, 1)
+        memoIdentifiers.splice(i, 1)
       }
     }
 
     // 找出被移动的节点
     // 此时，memoIdentifiers是identifiers2子集，接下来调整memoIdentifiers的位置为identifiers2子序列，拍完序之后，插入更简单
-    for (let i = items2.length - 1; i > -1; i --) {
+    for (let i = items2.length - 1, len = memoIdentifiers.length, curr = len; i > -1; i --) {
       const id2 = identifiers2[i]
       const index = memoIdentifiers.indexOf(id2)
       // 新增的，不在原来的列表中
@@ -420,30 +404,34 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
         continue
       }
 
-      const indexMoveTo = findIndexMoveTo(id2, identifiers2, memoIdentifiers)
-      if (indexMoveTo > -1 && index !== indexMoveTo) {
-        const item = memoItems[index]
-        const node = makePath(item, memoItems)
-        const nextItem = memoItems[indexMoveTo]
-        const before = makePath(nextItem, memoItems)
-
-        memoIdentifiers.splice(index, 1)
-        memoIdentifiers.splice(indexMoveTo - (indexMoveTo > index ? 1 : 0), 0, id2)
-        memoItems.splice(index, 1)
-        memoItems.splice(indexMoveTo - (indexMoveTo > index ? 1 : 0), 0, item)
-
-        moved.push({
-          before,
-          node,
-        })
+      // 无需移动
+      if (curr - 1 === index) {
+        curr --
+        continue
       }
+
+      const item = memoItems[index]
+      const next = curr === len ? null : memoItems[curr]
+      const before = next === null ? null : makePath(next, curr, memoItems)
+      const node = makePath(item, index, memoItems)
+
+      moved.push({
+        before,
+        node,
+      })
+
+      memoItems.splice(curr, 0, item)
+      memoIdentifiers.splice(curr, 0, id2)
+
+      memoItems.splice(index, 1)
+      memoIdentifiers.splice(index, 1)
+
+      curr --
     }
 
     // 找出被添加的节点
     // 由于前面做了排序，接下来，只需要按照对应序列插入即可
-    let curr = memoItems.length
-    let last = curr
-    for (let i = items2.length - 1; i > -1; i --) {
+    for (let i = items2.length - 1, len = memoIdentifiers.length, curr = len; i > -1; i --) {
       const id2 = identifiers2[i]
       const index = memoIdentifiers.indexOf(id2)
       // 不是新增的
@@ -452,11 +440,12 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
         continue
       }
 
-      const before = curr === last ? null : makePath(memoItems[curr], memoItems) // null表示插入到最后一个元素
+      const before = curr === len ? null : makePath(memoItems[curr], curr, memoItems) // null表示插入到最后一个元素
 
       const next = items2[i]
       memoIdentifiers.splice(curr, 0, id2)
       memoItems.splice(curr, 0, next)
+
 
       const node = {
         before,
@@ -481,7 +470,7 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
 
     for (let i = 0, len = memoItems.length; i < len; i ++) {
       const item = memoItems[i]
-      const node = makePath(item, memoItems)
+      const node = makePath(item, i, memoItems)
       const next = items2[i]
 
       if (typeof item === 'string') {
@@ -495,7 +484,7 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
         }
       }
       // 那些不是插入的新对象，才需要进入深对比
-      else if (items1.includes(item)) {
+      else if (items1.indexOf(item) > -1) {
         const [_name1, attrs1, ...children1] = item
         const [_name2, attrs2, ...children2] = next
 
@@ -504,7 +493,6 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
           mutations.push(...attrsMutations)
         }
 
-        console.log(children1, children2)
         const changes = diff(children1, children2, [...deepth, node])
         mutations.push(...changes)
       }
@@ -610,11 +598,6 @@ export function patchHyperJSON(hyperjson, mutations) {
         const [_, index, parent] = findNode(node, path)
         parent.splice(index + 2, 1)
       })
-      inserted.forEach((item) => {
-        const { before, next } = item
-        const [_, index, parent] = findNode(node, before)
-        parent.splice(index + 2, 0, next)
-      })
       moved.forEach((item) => {
         const { node: path, before } = item
 
@@ -623,6 +606,16 @@ export function patchHyperJSON(hyperjson, mutations) {
 
         const [_, index, parent] = findNode(node, before)
         parent.splice(index + 2, 0, next)
+      })
+      inserted.forEach((item) => {
+        const { before, next } = item
+        if (before === null) {
+          node.push(next)
+        }
+        else {
+          const [_, index, parent] = findNode(node, before)
+          parent.splice(index + 2, 0, next)
+        }
       })
     }
   })
