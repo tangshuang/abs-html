@@ -55,11 +55,11 @@ export function parseHTMLToHyperJSON(html, options = {}) {
     }
     // 开始一个标签
     else if (!inTagBegin && char === '<' && html[i + 1] !== ' ') {
-      if (html[i + 1] === '-' && html[i + 2] === '-') {
+      if (html[i + 1] === '!' && html[i + 2] === '-' && html[i + 3] === '-') {
         const comment = ['#comment', null]
         let content = ''
 
-        i += 3
+        i += 4
         char = html[i]
 
         while (!(char === '-' && html[i + 1] === '-' && html[i + 2] === '>')) {
@@ -97,87 +97,81 @@ export function parseHTMLToHyperJSON(html, options = {}) {
     }
     // 属性
     else if (inTagBegin && char === ' ') {
-      let attr = ''
-
-      i ++
-      char = html[i]
-
       let quota = ''
-
-      while (char !== '=' && char !== '>') {
-        if (char === '/' && html[i + 1] === '>') {
-          break
-        }
-        if (char === ' ' && !quota) {
-          break
-        }
-
-        if ((char === '"' || char === "'") && html[i - 1] !== '\\') {
-          if (char === quota) {
-            quota = ''
-          }
-          else {
-            quota = char
-          }
-        }
-
-        attr += char
-
-        i ++
-        char = html[i]
-      }
+      let name = ''
+      let value = ''
 
       const node = inTagBegin
+      const putAttr = (data) => {
+        if (!name) {
+          return
+        }
 
-      if (char === '/' && html[i + 1] === '>') {
-        const parent = nest.length ? nest[nest.length - 1] : nest
-        parent.push(node)
-        inTagBegin = null
-        i ++
-        continue
+        name = name.trim()
+        node[1] = node[1] || {}
+        node[1][name] = data
+        name = ''
+        value = ''
+        quota = ''
       }
 
-      if (char === '=') {
-        let value = ''
-
+      while (i < len) {
         i ++
         char = html[i]
 
-        while (char !== ' ' && char !== '>') {
-          if (char === '/' && html[i + 1] === '>') {
-            break
+        // 忽略空格
+        if (!quota && char === ' ') {
+          // 有些属性被放在引号中，有空格
+          if (name[0] !== '"' && name[0] !== "'") {
+            // 没有值的属性结束
+            if (name) {
+              putAttr(null)
+            }
+            continue
           }
-
-          value += char
-
-          i ++
-          char = html[i]
         }
 
-        if (char === '/' && html[i + 1] === '>') {
+        // 立即自关闭标签，例如 <img />
+        if (!quota && char === '/' && html[i + 1] === '>') {
           const parent = nest.length ? nest[nest.length - 1] : nest
           parent.push(node)
           inTagBegin = null
           i ++
+          putAttr(null)
+          break
+        }
+
+        // 关闭开始标签，例如 <div >
+        if (!quota && char === '>') {
+          i --
+          putAttr(null)
+          break
+        }
+
+        // 属性名结束，值开始
+        if (!quota && char === '=') {
+          i ++
+          char = html[i]
+          quota = char
           continue
         }
 
-        if (value[0] === '"' && value[value.length - 1] === '"') {
-          value = value.substring(1, value.length - 1)
-        }
-        else if (value[0] === "'" && value[value.length - 1] === "'") {
-          value = value.substring(1, value.length - 1)
+        if (!quota) {
+          name += char
+          continue
         }
 
-        node[1] = node[1] || {}
-        node[1][attr] = value
-      }
-      else if (char === ' ' || char === '>') {
-        node[1] = node[1] || {}
-        node[1][attr] = null
-      }
+        // 值结束
+        if (quota && (char === quota) && html[i - 1] !== '\\') {
+          putAttr(value)
+          continue
+        }
 
-      i --
+        if (quota) {
+          value += char
+          continue
+        }
+      }
     }
     // 开始标签结束
     else if (inTagBegin && char === '>') {
@@ -303,12 +297,18 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
         else if (attrs && attrs.id) {
           return `${name}#${attrs.id}`
         }
+        else if (attrs && attrs['data-id']) {
+          return `${name}#${attrs['data-id']}`
+        }
         else {
           return `${name}${attrs ? `[${Object.keys(attrs).join(',')}]` : ''}`
         }
       }
     })
     const res = ids.map((id, i) => {
+      if (id.indexOf('#') > 0) {
+        return id
+      }
       const regression = ids.slice(0, i)
       const count = regression.filter(item => item === id).length
       return id + '@' + (count + 1)
@@ -348,18 +348,35 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
     return deepth.concat(path || []).join('/')
   }
 
+  // 根据item在items中的位置，找到item应该移动到items0中的哪个位置
+  const findIndexMoveTo = (item, items, items0) => {
+    let index = -1
+    for (let i = 0, len = items.length; i < len; i ++) {
+      const next = items[i]
+      if (items0.includes(next)) {
+        index ++
+        if (item === next) {
+          return index
+        }
+      }
+    }
+    return index
+  }
+
   const diffAttrs = (attrs1, attrs2, deepth) => {
-    const _attrs = { ...(attrs1 || {}), ...(attrs2 || {}) }
+    const props1 = attrs1 || {}
+    const props2 = attrs2 || {}
+    const _attrs = { ...props1, ...props2 }
     const keys = Object.keys(_attrs)
     const mutations = []
     keys.forEach((key) => {
-      if (attrs1[key] !== attrs2[key]) {
+      if (props1[key] !== props2[key]) {
         mutations.push({
           type: 'attribute',
           target: createXPath(deepth),
           name: key,
-          next: key in attrs2 ? attrs2[key] : void 0,
-          prev: key in attrs1 ? attrs1[key] : void 0,
+          next: key in props2 ? props2[key] : void 0,
+          prev: key in props1 ? props1[key] : void 0,
         })
       }
     })
@@ -393,81 +410,59 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
       }
     }
 
-    // 找出被添加的节点
-    for (let i = 0, len = items2.length - 1; i < len; i ++) {
-      const id2 = identifiers2[i]
-
-      const index = memoIdentifiers.indexOf(id2)
-      if (index < 0) {
-        let sibling = null
-        // 从下一个节点开始找起
-        for (let curr = i + 1, len = identifiers2.length; curr < len; curr ++) {
-          const cid2 = identifiers2[curr]
-          const sibc = memoIdentifiers.indexOf(cid2)
-          if (sibc > -1) {
-            sibling = sibc
-            break
-          }
-        }
-
-        const before = sibling === null ? null : makePath(memoItems[sibling], memoItems) // null表示插入到最后一个元素
-        const item = items2[i]
-        const node = {
-          before,
-          next: item,
-        }
-
-        inserted.push(node)
-        if (sibling === null) {
-          memoItems.push(item)
-          memoIdentifiers.push(id2)
-        }
-        else {
-          memoItems.splice(sibling, 0, item)
-          memoIdentifiers.splice(sibling, 0, id2)
-        }
-      }
-    }
-
     // 找出被移动的节点
-    // 此时，identifiers2和memoIdentifiers内容相同，只是顺序不同，需要调整位置
+    // 此时，memoIdentifiers是identifiers2子集，接下来调整memoIdentifiers的位置为identifiers2子序列，拍完序之后，插入更简单
     for (let i = items2.length - 1; i > -1; i --) {
       const id2 = identifiers2[i]
       const index = memoIdentifiers.indexOf(id2)
-      if (index > -1 && index !== i) {
+      // 新增的，不在原来的列表中
+      if (index === -1) {
+        continue
+      }
+
+      const indexMoveTo = findIndexMoveTo(id2, identifiers2, memoIdentifiers)
+      if (indexMoveTo > -1 && index !== indexMoveTo) {
         const item = memoItems[index]
         const node = makePath(item, memoItems)
+        const nextItem = memoItems[indexMoveTo]
+        const before = makePath(nextItem, memoItems)
 
-        const next = i + 1
-        const nextId = identifiers2[next]
-        const nextIndex = memoIdentifiers.indexOf(nextId)
-
-        let before = null
-        if (next >= items2.length) {
-          memoItems.splice(index, 1)
-          memoIdentifiers.splice(index, 1)
-          memoItems.push(item)
-          memoIdentifiers.push(id2)
-        }
-        else if (nextIndex > -1) {
-          const nextItem = memoItems[nextIndex]
-          before = makePath(nextItem, memoItems)
-
-          memoItems.splice(index, 1)
-          memoItems.splice(nextIndex - (nextIndex > index ? 1 : 0), 0, item)
-        }
-        // 这种情况不可能存在，存在了就是有问题
-        else {
-          memoItems.splice(index, 1)
-          memoIdentifiers.splice(index, 1)
-          continue
-        }
+        memoIdentifiers.splice(index, 1)
+        memoIdentifiers.splice(indexMoveTo - (indexMoveTo > index ? 1 : 0), 0, id2)
+        memoItems.splice(index, 1)
+        memoItems.splice(indexMoveTo - (indexMoveTo > index ? 1 : 0), 0, item)
 
         moved.push({
           before,
           node,
         })
       }
+    }
+
+    // 找出被添加的节点
+    // 由于前面做了排序，接下来，只需要按照对应序列插入即可
+    let curr = memoItems.length
+    let last = curr
+    for (let i = items2.length - 1; i > -1; i --) {
+      const id2 = identifiers2[i]
+      const index = memoIdentifiers.indexOf(id2)
+      // 不是新增的
+      if (index > -1) {
+        curr --
+        continue
+      }
+
+      const before = curr === last ? null : makePath(memoItems[curr], memoItems) // null表示插入到最后一个元素
+
+      const next = items2[i]
+      memoIdentifiers.splice(curr, 0, id2)
+      memoItems.splice(curr, 0, next)
+
+      const node = {
+        before,
+        next,
+      }
+      inserted.push(node)
     }
 
     const mutation = {
@@ -487,24 +482,29 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
     for (let i = 0, len = memoItems.length; i < len; i ++) {
       const item = memoItems[i]
       const node = makePath(item, memoItems)
+      const next = items2[i]
 
       if (typeof item === 'string') {
-        if (item !== items2[i]) {
+        if (item !== next) {
           mutations.push({
             type: 'text',
             target: createXPath(deepth, node),
-            next: items2[i],
+            next: next,
             prev: item,
           })
         }
       }
+      // 那些不是插入的新对象，才需要进入深对比
       else if (items1.includes(item)) {
         const [_name1, attrs1, ...children1] = item
-        const [_name2, attrs2, ...children2] = items2[i]
+        const [_name2, attrs2, ...children2] = next
 
-        const attrsMutations = diffAttrs(attrs1, attrs2, [...deepth, node])
-        mutations.push(...attrsMutations)
+        if (attrs1 || attrs2) {
+          const attrsMutations = diffAttrs(attrs1, attrs2, [...deepth, node])
+          mutations.push(...attrsMutations)
+        }
 
+        console.log(children1, children2)
         const changes = diff(children1, children2, [...deepth, node])
         mutations.push(...changes)
       }
