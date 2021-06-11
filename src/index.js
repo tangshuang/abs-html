@@ -271,7 +271,7 @@ export function rebuildHyperJSONToHTML(hyperjson) {
     return str
   }
 
-  if (name.indexOf('!') === 0 || name.indexOf('?')) {
+  if (name.indexOf('!') === 0 || name.indexOf('?') === 0) {
     html += `<${name}${buildAttrs(attrs)}>${buildChildren(children)}`
   }
   else if (name.indexOf('#') === 0) {
