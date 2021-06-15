@@ -18,11 +18,9 @@ const SELF_CLOSE_TAGS = [
 /**
  * 将html字符串解析为hyperJSON
  * @param {string} html
- * @param {object} options
- * @param {boolean} options.loose 是否宽松，开启后，将保留标签换行（和原始html换行一致）
  * @returns hyperJSON
  */
-export function parseHTMLToHyperJSON(html, options = {}) {
+export function parseHTMLToHyperJSON(html) {
   const nest = []
 
   const len = html.length
@@ -203,21 +201,6 @@ export function parseHTMLToHyperJSON(html, options = {}) {
     }
   }
 
-  /**
-   * 检查内容是否包含字符串，如果不不包含字符串，说明这里的换行没有意义，是代码层面的，需要清除，只留下子标签
-   */
-  if (!options.loose) {
-    nodes.forEach((node) => {
-    const [tag, attrs, ...children] = node
-    const strs = children.filter(item => typeof item === 'string' && item.trim())
-      if (children.length > 1 && !strs.length) {
-        const contents = children.filter(item => typeof item !== 'string')
-        node.length = 2
-        node.push(...contents)
-      }
-    })
-  }
-
   return nest[0]
 }
 
@@ -283,10 +266,14 @@ export function rebuildHyperJSONToHTML(hyperjson) {
   return html
 }
 
-export function diffHyperJSON(hyperjson1, hyperjson2) {
+export function diffHyperJSON(hyperjson1, hyperjson2, tiny) {
   const getIdentifiers = (items) => {
     const ids = items.map((item) => {
       if (typeof item === 'string') {
+        // break line like \n\s\s
+        if (item[0] === '\n' && !item.trim()) {
+          return '#nl_' + (item.length - 1)
+        }
         return '#text'
       }
       else {
@@ -305,6 +292,7 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
         }
       }
     })
+
     const res = ids.map((id, i) => {
       if (id.indexOf('#') > 0) {
         return id
@@ -313,13 +301,14 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
       const count = regression.filter(item => item === id).length
       return id + '@' + (count + 1)
     })
+
     return res
   }
 
   const makePath = (item, index, items) => {
-    // if (typeof item !== 'string' && !Array.isArray(item)) {
-    //   throw new Error(`makePath第一个参数必须是字符串或数组，结果接收到 ${JSON.stringify(item)},${JSON.stringify(items)}`)
-    // }
+    if (tiny) {
+      return index
+    }
 
     let nth = 1
 
@@ -327,6 +316,7 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
       if (i >= index && items[i] === item) {
         break
       }
+
       if (typeof item === 'string') {
         if (typeof items[i] === 'string') {
           nth ++
@@ -344,8 +334,74 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
     return `${name}[${nth}]`
   }
 
-  const createXPath = (deepth, path) => {
-    return deepth.concat(path || []).join('/')
+  const createPath = (deepth, path) => {
+    return deepth.concat(path || path === 0 ? path : []).join('/')
+  }
+
+  const createMutation = (data) => {
+    const { type } = data
+    if (type === 'children') {
+      const { removed, inserted, moved } = data
+      if (!removed.length && !inserted.length && !moved.length) {
+        return
+      }
+    }
+
+    if (!tiny) {
+      return data
+    }
+
+    if (type === 'attribute') {
+      const { target, name, next } = data
+      return {
+        t: 'A',
+        e: target,
+        n: name,
+        v: next,
+      }
+    }
+
+    if (type === 'text') {
+      const { target, next } = data
+      return {
+        t: 'T',
+        e: target,
+        v: next,
+      }
+    }
+
+    if (type === 'children') {
+      const { target, removed, inserted, moved } = data
+      const output = {
+        t: 'C',
+        e: target,
+      }
+      if (removed.length) {
+        output.r = removed.map((item) => {
+          const { node } = item
+          return { e: node }
+        })
+      }
+      if (moved.length) {
+        output.m = moved.map((item) => {
+          const { before, node } = item
+          return {
+            e: node,
+            b: before,
+          }
+        })
+      }
+      if (inserted.length) {
+        output.i = inserted.map((item) => {
+          const { before, next } = item
+          return {
+            x: next,
+            b: before,
+          }
+        })
+      }
+      return output
+    }
   }
 
   const diffAttrs = (attrs1, attrs2, deepth) => {
@@ -356,13 +412,14 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
     const mutations = []
     keys.forEach((key) => {
       if (props1[key] !== props2[key]) {
-        mutations.push({
+        const mutation = createMutation({
           type: 'attribute',
-          target: createXPath(deepth),
+          target: createPath(deepth),
           name: key,
           next: key in props2 ? props2[key] : void 0,
           prev: key in props1 ? props1[key] : void 0,
         })
+        mutations.push(mutation)
       }
     })
     return mutations
@@ -446,7 +503,6 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
       memoIdentifiers.splice(curr, 0, id2)
       memoItems.splice(curr, 0, next)
 
-
       const node = {
         before,
         next,
@@ -454,17 +510,17 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
       inserted.push(node)
     }
 
-    const mutation = {
+    const mutation = createMutation({
       type: 'children',
-      target: createXPath(deepth, []),
+      target: createPath(deepth, []),
       removed,
       inserted,
       moved,
-    }
+    })
 
     const mutations = []
 
-    if (mutation.removed.length + mutation.inserted.length + mutation.moved.length) {
+    if (mutation) {
       mutations.push(mutation)
     }
 
@@ -475,12 +531,13 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
 
       if (typeof item === 'string') {
         if (item !== next) {
-          mutations.push({
+          const mutation = createMutation({
             type: 'text',
-            target: createXPath(deepth, node),
+            target: createPath(deepth, node),
             next: next,
             prev: item,
           })
+          mutations.push(mutation)
         }
       }
       // 那些不是插入的新对象，才需要进入深对比
@@ -501,8 +558,6 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
     return mutations
   }
 
-
-
   const mutations = []
   const [name1, attrs1, ...children1] = hyperjson1
   const [name2, attrs2, ...children2] = hyperjson2
@@ -516,7 +571,7 @@ export function diffHyperJSON(hyperjson1, hyperjson2) {
   return mutations
 }
 
-export function patchHyperJSON(hyperjson, mutations) {
+export function patchHyperJSON(hyperjson, mutations, tiny) {
   const deepClone = (obj) => {
     const copy = Array.isArray(obj) ? [] : {}
     for (let key in obj) {
@@ -526,10 +581,39 @@ export function patchHyperJSON(hyperjson, mutations) {
     }
     return copy
   }
+
+  const findNodeByTiny = (hyperjson, target) => {
+    if (typeof target === 'number') {
+      const [_name, _attrs, ...children] = hyperjson
+      return [children[target], target, hyperjson]
+    }
+
+    const path = target.split('/')
+
+    let node = hyperjson
+    let parent = null
+    let index = -1
+
+    path.forEach((item) => {
+      const i = +item
+      const [_name, _attrs, ...children] = node
+
+      parent = node
+      node = children[i]
+      index = i
+    })
+
+    return [node, index, parent]
+  }
+
   const findNode = (hyperjson, target) => {
     if (target === null) {
       const [_name, _attrs, ...children] = hyperjson
       return [null, children.length, hyperjson]
+    }
+
+    if (tiny) {
+      return findNodeByTiny(hyperjson, target)
     }
 
     const path = target.split('/').map((item) => {
@@ -572,16 +656,19 @@ export function patchHyperJSON(hyperjson, mutations) {
   }
 
   const json = deepClone(hyperjson)
-  mutations.forEach((mutation) => {
-    const { type, target } = mutation
+
+  const patchBy = (mutation) => {
+    const type = tiny ? mutation.t : mutation.type
+    const target = tiny ? mutation.e : mutation.target
     const [node, index, parent] = findNode(json, target)
 
-    if (type === 'text') {
-      const { next } = mutation
+    if (tiny ? type === 'T' : type === 'text') {
+      const next = tiny ? mutation.v : mutation.next
       parent[index + 2] = next
     }
-    else if (type === 'attribute') {
-      const { name, next } = mutation
+    else if (tiny ? type === 'A' : type === 'attribute') {
+      const name = tiny ? mutation.n : mutation.name
+      const next = tiny ? mutation.v : mutation.next
       const attrs = node[1] || {}
       if (typeof next === 'undefined') {
         delete attrs[name]
@@ -591,24 +678,38 @@ export function patchHyperJSON(hyperjson, mutations) {
       }
       node[1] = attrs
     }
-    else if (type === 'children') {
-      const { removed, inserted, moved } = mutation
+    else if (tiny ? type === 'C' : type === 'children') {
+      const removed = (tiny ? mutation.r : mutation.removed) || []
+      const inserted = (tiny ? mutation.i : mutation.inserted) || []
+      const moved = (tiny ? mutation.m : mutation.moved) || []
+
       removed.forEach((item) => {
-        const { node: path } = item
+        const path = tiny ? item.e : item.node
         const [_, index, parent] = findNode(node, path)
         parent.splice(index + 2, 1)
       })
+
       moved.forEach((item) => {
-        const { node: path, before } = item
+        const path = tiny ? item.e : item.node
+        const before = tiny ? item.b : item.before
 
         const [next, removeIndex, removeFromParent] = findNode(node, path)
         removeFromParent.splice(removeIndex + 2, 1)
 
         const [_, index, parent] = findNode(node, before)
-        parent.splice(index + 2, 0, next)
+        // notice, only tiny diff need to compute index position
+        if (tiny && removeIndex < index) {
+          parent.splice(index + 1, 0, next)
+        }
+        else {
+          parent.splice(index + 2, 0, next)
+        }
       })
+
+
       inserted.forEach((item) => {
-        const { before, next } = item
+        const before = tiny ? item.b : item.before
+        const next = tiny ? item.x : item.next
         if (before === null) {
           node.push(next)
         }
@@ -618,6 +719,8 @@ export function patchHyperJSON(hyperjson, mutations) {
         }
       })
     }
-  })
+  }
+
+  mutations.forEach(patchBy)
   return json
 }

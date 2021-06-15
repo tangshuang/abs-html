@@ -17,11 +17,11 @@ const html = `
   </body>
 </html>
 `
-const json = parseHTMLToHyperJSON(html, { loose: true })
-console.log(json)
+const json = parseHTMLToHyperJSON(html)
+console.log(json[3][5])
 
-const str = rebuildHyperJSONToHTML(json)
-console.log(str)
+// const str = rebuildHyperJSONToHTML(json)
+// console.log(str)
 
 const html2 = `
 <!DOCTYPE html PUBLIC "-//W3C//DTD SVG 1.1//EN">
@@ -37,15 +37,18 @@ const html2 = `
     <div class="cat">cat</div>
     <img src="http://xxx.com/a.jpg" />
     <my-app data-text="my dog's name is \\"doly\\" 5" />
-    <div>4</div>
+    <div>4xxx</div>
   </body>
 </html>
 `
-const json2 = parseHTMLToHyperJSON(html2, { loose: true })
-const mutations = diffHyperJSON(json, json2)
+const json2 = parseHTMLToHyperJSON(html2)
+console.log(json2[3][5])
+
+const tiny = true
+const mutations = diffHyperJSON(json, json2, tiny)
 console.log(mutations)
 
-const json3 = patchHyperJSON(json, mutations)
+const json3 = patchHyperJSON(json, mutations, tiny)
 console.log(json3)
 
 const html3 = rebuildHyperJSONToHTML(json3)

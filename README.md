@@ -31,10 +31,9 @@ import {
 
 ## 使用
 
-### parseHTMLToHyperJSON(html, { loose })
+### parseHTMLToHyperJSON(html)
 
 - html HTML字符串，注意，只能包含一个根节点
-- loose 是否宽松，开启后，将保留标签换行（和原始html换行一致）
 
 ```js
 const hyperJSON = parseHTMLToHyperJSON(`
@@ -134,7 +133,7 @@ const html = rebuildHyperJSONToHTML(hyperJSON)
 
 注意，恢复出来的html是否紧凑，完全由创建hyperJSON时传入的loose参数决定。
 
-### diffHyperJSON(hyperJSON1, hyperJSON2)
+### diffHyperJSON(hyperJSON1, hyperJSON2, tiny)
 
 查看hyperJSON2相对于hyperJSON1而言，有哪些变化。
 
@@ -142,7 +141,9 @@ const html = rebuildHyperJSONToHTML(hyperJSON)
 const mutations = diffHyperJSON(hyperJSON1, hyperJSON2)
 ```
 
-### patchHyperJSON(hyperJSON, mutations)
+- tiny: boolean 是否使用体积最小的变化记录，开启后，被记录的mutations体积会缩小30%以上，但不利于阅读
+
+### patchHyperJSON(hyperJSON, mutations, tiny)
 
 将mutations作用于一个hyperJSON，得到一个新的经过改变的hyperJSON。
 
