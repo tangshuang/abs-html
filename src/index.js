@@ -16,11 +16,12 @@ const SELF_CLOSE_TAGS = [
 ]
 
 /**
- * 将html字符串解析为hyperJSON
+ * 将html字符串解析为ast
  * @param {string} html
- * @returns hyperJSON
+ * @param {function} visit 访问第一次生成时的节点，返回新节点信息
+ * @returns ast
  */
-export function parseHTMLToHyperJSON(html) {
+export function parseHtmlToAst(html, visit) {
   const nest = []
 
   const len = html.length
@@ -173,7 +174,7 @@ export function parseHTMLToHyperJSON(html) {
     }
     // 开始标签结束
     else if (inTagBegin && char === '>') {
-      const node = inTagBegin
+      const node = visit ? visit(inTagBegin) : inTagBegin
       const parent = nest.length ? nest[nest.length - 1] : nest
       parent.push(node)
       nest.push(node)
@@ -204,8 +205,8 @@ export function parseHTMLToHyperJSON(html) {
   return nest[0]
 }
 
-export function rebuildHyperJSONToHTML(hyperjson) {
-  const [name, attrs, ...children] = hyperjson
+export function buildAstToHtml(ast) {
+  const [name, attrs, ...children] = ast
 
   let html = ''
 
@@ -241,7 +242,7 @@ export function rebuildHyperJSONToHTML(hyperjson) {
         str += child
       }
       else {
-        str += rebuildHyperJSONToHTML(child)
+        str += buildAstToHtml(child)
       }
     })
 
@@ -266,7 +267,7 @@ export function rebuildHyperJSONToHTML(hyperjson) {
   return html
 }
 
-export function diffHyperJSON(hyperjson1, hyperjson2, tiny) {
+export function diffAst(ast1, ast2, tiny) {
   const getIdentifiers = (items) => {
     const ids = items.map((item) => {
       if (typeof item === 'string') {
@@ -559,8 +560,8 @@ export function diffHyperJSON(hyperjson1, hyperjson2, tiny) {
   }
 
   const mutations = []
-  const [name1, attrs1, ...children1] = hyperjson1
-  const [name2, attrs2, ...children2] = hyperjson2
+  const [name1, attrs1, ...children1] = ast1
+  const [name2, attrs2, ...children2] = ast2
 
   const attrsMutations = diffAttrs(attrs1, attrs2, [])
   mutations.push(...attrsMutations)
@@ -571,7 +572,12 @@ export function diffHyperJSON(hyperjson1, hyperjson2, tiny) {
   return mutations
 }
 
-export function patchHyperJSON(hyperjson, mutations, tiny) {
+export function patchAst(ast, mutations, tiny) {
+  // 如果mutations中开头5个都是只有t而没有type，说明是用的tiny模式
+  if (typeof tiny === 'undefined' && mutations.slice(0, 5).every(mutation => 't' in mutation && !('type' in mutation))) {
+    tiny = true
+  }
+
   const deepClone = (obj) => {
     const copy = Array.isArray(obj) ? [] : {}
     for (let key in obj) {
@@ -582,15 +588,15 @@ export function patchHyperJSON(hyperjson, mutations, tiny) {
     return copy
   }
 
-  const findNodeByTiny = (hyperjson, target) => {
+  const findNodeByTiny = (ast, target) => {
     if (typeof target === 'number') {
-      const [_name, _attrs, ...children] = hyperjson
-      return [children[target], target, hyperjson]
+      const [_name, _attrs, ...children] = ast
+      return [children[target], target, ast]
     }
 
     const path = target.split('/')
 
-    let node = hyperjson
+    let node = ast
     let parent = null
     let index = -1
 
@@ -606,14 +612,14 @@ export function patchHyperJSON(hyperjson, mutations, tiny) {
     return [node, index, parent]
   }
 
-  const findNode = (hyperjson, target) => {
+  const findNode = (ast, target) => {
     if (target === null) {
-      const [_name, _attrs, ...children] = hyperjson
-      return [null, children.length, hyperjson]
+      const [_name, _attrs, ...children] = ast
+      return [null, children.length, ast]
     }
 
     if (tiny) {
-      return findNodeByTiny(hyperjson, target)
+      return findNodeByTiny(ast, target)
     }
 
     const path = target.split('/').map((item) => {
@@ -622,7 +628,7 @@ export function patchHyperJSON(hyperjson, mutations, tiny) {
       return [name, nth]
     })
 
-    let node = hyperjson
+    let node = ast
     let parent = null
     let index = -1
     path.forEach(([name, nth]) => {
@@ -655,7 +661,7 @@ export function patchHyperJSON(hyperjson, mutations, tiny) {
     return [node, index, parent]
   }
 
-  const json = deepClone(hyperjson)
+  const json = deepClone(ast)
 
   const patchBy = (mutation) => {
     const type = tiny ? mutation.t : mutation.type

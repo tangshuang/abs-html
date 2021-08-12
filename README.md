@@ -1,20 +1,8 @@
 # ABS-HTML
 
-将HTML转化为[HyperJSON](https://www.tangshuang.net/8026.html)后处理，实现HTML的无状态计算。
+将HTML转化为Ast后处理，实现HTML的无状态计算。
 
 ## 安装
-
-```html
-<script src="//unpkg.com/abs-html"></script>
-<script>
-  const {
-    parseHTMLToHyperJSON,
-    rebuildHyperJSONToHTML,
-    diffHyperJSON,
-    patchHyperJSON,
-  } = window
-</script>
-```
 
 ```sh
 npm i abs-html
@@ -22,21 +10,22 @@ npm i abs-html
 
 ```js
 import {
-  parseHTMLToHyperJSON,
-  rebuildHyperJSONToHTML,
-  diffHyperJSON,
-  patchHyperJSON,
+  parseHtmlToAst,
+  buildAstToHtml,
+  diffAst,
+  patchAst,
 } from 'abs-html'
 ```
 
 ## 使用
 
-### parseHTMLToHyperJSON(html)
+### parseHtmlToAst(html: visit): Ast
 
 - html HTML字符串，注意，只能包含一个根节点
+- visit 生成节点时，可通过visit函数进行修改
 
 ```js
-const hyperJSON = parseHTMLToHyperJSON(`
+const ast = parseHtmlToAst(`
   <!DOCTYPE html>
   <html>
     <head>
@@ -121,34 +110,34 @@ const hyperJSON = parseHTMLToHyperJSON(`
 */
 ```
 
-### rebuildHyperJSONToHTML(hyperJSON)
+### buildAstToHtml(ast)
 
 ```js
-const html = rebuildHyperJSONToHTML(hyperJSON)
+const html = buildAstToHtml(ast)
 
 /**
-<!DOCTYPE html><html>...</html>
+<!DOCTYPE html>
+<html>...</html>
 */
 ```
 
-注意，恢复出来的html是否紧凑，完全由创建hyperJSON时传入的loose参数决定。
+### diffAst(ast1, ast2, tiny)
 
-### diffHyperJSON(hyperJSON1, hyperJSON2, tiny)
-
-查看hyperJSON2相对于hyperJSON1而言，有哪些变化。
+查看ast2相对于ast1而言，有哪些变化。
 
 ```js
-const mutations = diffHyperJSON(hyperJSON1, hyperJSON2)
+const mutations = diffAst(ast1, ast2)
 ```
 
 - tiny: boolean 是否使用体积最小的变化记录，开启后，被记录的mutations体积会缩小30%以上，但不利于阅读
 
-### patchHyperJSON(hyperJSON, mutations, tiny)
+### patchAst(ast, mutations, tiny?)
 
-将mutations作用于一个hyperJSON，得到一个新的经过改变的hyperJSON。
+将mutations作用于一个ast，得到一个新的经过改变的ast。
+如果tiny没有传，会通过前5个mutation的属性存在情况自动判定。
 
 ```js
-const hyperJSON2 = patchHyperJSON(hyperJSON, mutations)
+const ast2 = patchAst(ast, mutations)
 ```
 
 注意，由于diff算法的一些局限性，loose参数为true时，可能无法准确还原换行。
