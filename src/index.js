@@ -88,7 +88,7 @@ export function parseHtmlToAst(html, visit) {
         char = html[i]
       }
 
-      const node = [tag]
+      const node = [tag.trim()]
       inTagBegin = node
       nodes.push(node)
 
