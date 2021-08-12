@@ -1,4 +1,4 @@
-import { parseHTMLToHyperJSON, rebuildHyperJSONToHTML, diffHyperJSON, patchHyperJSON } from '../src/index.js'
+import { parseHtmlToAst, buildAstToHtml, diffAst, patchAst, traverseAst } from '../src/index.js'
 
 const html = `
 <!DOCTYPE html PUBLIC "-//W3C//DTD SVG 1.1//EN">
@@ -17,11 +17,22 @@ const html = `
   </body>
 </html>
 `
-const json = parseHTMLToHyperJSON(html)
-console.log(json[3][5])
 
-// const str = rebuildHyperJSONToHTML(json)
-// console.log(str)
+const visitor = {
+  '*': {
+    enter(node, parent) {
+      // 去掉所有换行逻辑
+      if (typeof node === 'string' && /\n\s*/.test(node)) {
+        const index = parent.indexOf(node)
+        parent.splice(index, 1)
+      }
+    },
+  },
+}
+
+const ast = parseHtmlToAst(html)
+traverseAst(ast, visitor)
+console.log('ast:', ast)
 
 const html2 = `
 <!DOCTYPE html PUBLIC "-//W3C//DTD SVG 1.1//EN">
@@ -41,15 +52,15 @@ const html2 = `
   </body>
 </html>
 `
-const json2 = parseHTMLToHyperJSON(html2)
-console.log(json2[3][5])
+const ast2 = parseHtmlToAst(html2)
+console.log('ast2:', ast2)
 
-const tiny = true
-const mutations = diffHyperJSON(json, json2, tiny)
-console.log(mutations)
+const tiny = false
+const mutations = diffAst(ast, ast2, tiny)
+console.log('mutations:', mutations)
 
-const json3 = patchHyperJSON(json, mutations, tiny)
-console.log(json3)
+const ast3 = patchAst(ast, mutations, tiny)
+console.log('ast3:', ast3)
 
-const html3 = rebuildHyperJSONToHTML(json3)
+const html3 = buildAstToHtml(ast3)
 console.log(html3)

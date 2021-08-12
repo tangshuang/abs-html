@@ -267,6 +267,35 @@ export function buildAstToHtml(ast) {
   return html
 }
 
+export function traverseAst(ast, visitor) {
+  function traverseArray(arr, parent) {
+    arr.forEach((child) => {
+      traverseNode(child, parent)
+    })
+  }
+
+  function traverseNode(node, parent) {
+    const [type, props, ...children] = node
+    const methods = visitor[type] || visitor['*']
+    if (methods && methods.enter) {
+      methods.enter(node, parent)
+    }
+
+    // 如果被移除了，就不再往内部迭代
+    if (Array.isArray(parent) && !parent.includes(node)) {
+      return
+    }
+
+    traverseArray(children, node)
+
+    if (methods && methods.exit) {
+      methods.exit(node, parent)
+    }
+  }
+
+  traverseNode(ast, null)
+}
+
 export function diffAst(ast1, ast2, tiny) {
   const getIdentifiers = (items) => {
     const ids = items.map((item) => {
@@ -613,9 +642,15 @@ export function patchAst(ast, mutations, tiny) {
   }
 
   const findNode = (ast, target) => {
+    // 末尾位置
     if (target === null) {
       const [_name, _attrs, ...children] = ast
       return [null, children.length, ast]
+    }
+
+    // 自己本身
+    if (target === '') {
+      return [ast, -1, null]
     }
 
     if (tiny) {
@@ -711,7 +746,6 @@ export function patchAst(ast, mutations, tiny) {
           parent.splice(index + 2, 0, next)
         }
       })
-
 
       inserted.forEach((item) => {
         const before = tiny ? item.b : item.before
