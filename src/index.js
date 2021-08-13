@@ -102,11 +102,11 @@ export function parseHtmlToAst(html, visit) {
 
       const node = inTagBegin
       const putAttr = (data) => {
+        name = name.trim()
         if (!name) {
           return
         }
 
-        name = name.trim()
         node[1] = node[1] || {}
         node[1][name] = data
         name = ''
