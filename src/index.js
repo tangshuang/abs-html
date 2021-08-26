@@ -287,7 +287,7 @@ export function traverseAst(ast, visitor) {
 
     // 如果被移除了，就不再往内部迭代，且exit也不会再执行
     // 在forEach内部，此时 parent[index] == undefined
-    if (parent[index] !== node) {
+    if (parent && parent[index] !== node) {
       return
     }
 
