@@ -268,18 +268,18 @@ export function buildAstToHtml(ast) {
 }
 
 export function traverseAst(ast, visitor) {
-  function traverseArray(arr, parent) {
-    arr.forEach((child) => {
-      traverseNode(child, parent)
+  function traverseArray(arr, parent, startAt) {
+    arr.forEach((child, i) => {
+      traverseNode(child, parent, i + startAt)
     })
   }
 
-  function traverseNode(node, parent) {
+  function traverseNode(node, parent, index) {
     // 字符串仅支持enter处理
     if (typeof node === 'string') {
       const enter = visitor['[[String]]'] && visitor['[[String]]'].enter
       if (enter) {
-        enter(node, parent)
+        enter(node, parent, index)
       }
       return
     }
@@ -288,7 +288,7 @@ export function traverseAst(ast, visitor) {
     const methods = visitor[type] || visitor['*']
 
     if (methods && methods.enter) {
-      methods.enter(node, parent)
+      methods.enter(node, parent, index)
     }
 
     // 如果被移除了，就不再往内部迭代
@@ -296,14 +296,14 @@ export function traverseAst(ast, visitor) {
       return
     }
 
-    traverseArray(children, node)
+    traverseArray(children, node, 2) // children是从第2个索引开始
 
     if (methods && methods.exit) {
-      methods.exit(node, parent)
+      methods.exit(node, parent, index)
     }
   }
 
-  traverseNode(ast, null)
+  traverseNode(ast, null, -1)
 }
 
 export function diffAst(ast1, ast2, tiny) {
