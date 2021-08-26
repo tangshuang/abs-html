@@ -268,12 +268,6 @@ export function buildAstToHtml(ast) {
 }
 
 export function traverseAst(ast, visitor) {
-  function traverseArray(arr, parent, startAt) {
-    arr.forEach((child, i) => {
-      traverseNode(child, parent, i + startAt)
-    })
-  }
-
   function traverseNode(node, parent, index) {
     // 字符串仅支持enter处理
     if (typeof node === 'string') {
@@ -284,19 +278,29 @@ export function traverseAst(ast, visitor) {
       return
     }
 
-    const [type, props, ...children] = node
+    const [type] = node
     const methods = visitor[type] || visitor['*']
 
     if (methods && methods.enter) {
       methods.enter(node, parent, index)
     }
 
-    // 如果被移除了，就不再往内部迭代
-    if (Array.isArray(parent) && !parent.includes(node)) {
+    // 如果被移除了，就不再往内部迭代，且exit也不会再执行
+    // 在forEach内部，此时 parent[index] == undefined
+    if (parent[index] !== node) {
       return
     }
 
-    traverseArray(children, node, 2) // children是从第2个索引开始
+    // 如果被修改了，其内部元素也可能被修改，因此，要动态重新获取children
+    // 由于内部可能删除child，所以不能把children赋值给另外一个变量，必须保证数组引用一致性
+    node.forEach((child, i) => {
+      // 从真正的children开始处理
+      if (i < 2) {
+        return
+      }
+      // 由于forEach的特殊机制，即使在内部执行了splice，i也是正确位置
+      traverseNode(child, node, i) // children是从第2个索引开始
+    })
 
     if (methods && methods.exit) {
       methods.exit(node, parent, index)
