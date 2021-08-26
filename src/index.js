@@ -275,8 +275,18 @@ export function traverseAst(ast, visitor) {
   }
 
   function traverseNode(node, parent) {
+    // 字符串仅支持enter处理
+    if (typeof node === 'string') {
+      const enter = visitor['[[String]]'] && visitor['[[String]]'].enter
+      if (enter) {
+        enter(node, parent)
+      }
+      return
+    }
+
     const [type, props, ...children] = node
     const methods = visitor[type] || visitor['*']
+
     if (methods && methods.enter) {
       methods.enter(node, parent)
     }
